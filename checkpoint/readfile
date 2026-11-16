@@ -1,0 +1,118 @@
+
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. CHKRESTR.
+
+       ENVIRONMENT DIVISION.
+       INPUT-OUTPUT SECTION.
+       FILE-CONTROL.
+
+           SELECT CUST-FILE
+           ASSIGN TO "CUSTOMER.DAT"
+           ORGANIZATION IS LINE SEQUENTIAL
+           FILE STATUS IS WS-FS1.
+
+           SELECT CHK-FILE
+           ASSIGN TO "CHECKPOINT.DAT"
+           ORGANIZATION IS LINE SEQUENTIAL
+           FILE STATUS IS WS-FS2.
+
+       DATA DIVISION.
+       FILE SECTION.
+
+       FD CUST-FILE.
+       01 CUST-REC.
+          05 CUST-KEY PIC X(11).
+          05 FILLER PIC X.
+          05 CUST-BALANCE PIC 9(7)V99.
+
+       FD CHK-FILE.
+       01 CHK-REC.
+          05 CHK-COUNT PIC 9(7).
+          05 CHK-TOTAL PIC 9(11)V99.
+
+       WORKING-STORAGE SECTION.
+
+       01 WS-FS1 PIC XX.
+       01 WS-FS2 PIC XX.
+       01 WS-COUNT PIC 9(7) VALUE 0.
+       01 WS-BATCH PIC 9 VALUE 0.
+       01 WS-OLD-COUNT PIC 9(7) VALUE 0.
+       01 WS-TOTAL PIC 9(11)V99 VALUE 0.
+       01 WS-INTEREST PIC 9(9)V99.
+       01 WS-EOF PIC X VALUE 'N'.
+
+       PROCEDURE DIVISION.
+
+       MAIN-PARA.
+
+           OPEN INPUT CHK-FILE
+
+           IF WS-FS2 = '00'
+               READ CHK-FILE
+                   AT END CONTINUE
+                   NOT AT END
+                       MOVE CHK-COUNT TO WS-OLD-COUNT
+                       MOVE CHK-TOTAL TO WS-TOTAL
+               END-READ
+               CLOSE CHK-FILE
+           END-IF
+
+           MOVE WS-OLD-COUNT TO WS-COUNT
+
+           IF WS-COUNT > 0
+               DISPLAY 'RESTART DETECTED'
+               DISPLAY 'SKIPPING RECORDS: ' WS-COUNT
+           ELSE
+               DISPLAY 'NEW JOB STARTED'
+           END-IF
+
+           OPEN INPUT CUST-FILE
+
+           PERFORM WS-COUNT TIMES
+               READ CUST-FILE
+           END-PERFORM
+
+           PERFORM UNTIL WS-EOF = 'Y'
+
+               READ CUST-FILE
+                   AT END
+                       MOVE 'Y' TO WS-EOF
+                   NOT AT END
+                       PERFORM PROCESS-RECORD
+               END-READ
+
+           END-PERFORM
+
+           DISPLAY 'JOB COMPLETED'
+           DISPLAY 'TOTAL RECORDS: ' WS-COUNT
+           DISPLAY 'TOTAL INTEREST: ' WS-TOTAL
+
+           CLOSE CUST-FILE
+           STOP RUN.
+
+       PROCESS-RECORD.
+
+           COMPUTE WS-INTEREST =
+               CUST-BALANCE * 5 / 100
+
+           ADD WS-INTEREST TO WS-TOTAL
+           ADD 1 TO WS-COUNT
+           ADD 1 TO WS-BATCH
+
+           IF WS-BATCH = 3
+               PERFORM SAVE-CHECKPOINT
+               MOVE 0 TO WS-BATCH
+           END-IF.
+
+       SAVE-CHECKPOINT.
+
+           OPEN OUTPUT CHK-FILE
+
+           MOVE WS-COUNT TO CHK-COUNT
+           MOVE WS-TOTAL TO CHK-TOTAL
+
+           WRITE CHK-REC
+
+           CLOSE CHK-FILE
+
+           DISPLAY 'CHECKPOINT SAVED: ' WS-COUNT.
